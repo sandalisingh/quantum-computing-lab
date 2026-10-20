@@ -50,11 +50,11 @@ class ApproximateEncoder:
             for j in range(self.N_D):
                 value = int(dataset[i, j])
 
-                # Quantum state = |value > |j> |i>
+                # Quantum state = |i > |j> |value>
                 index = (
-                    i       # index
-                    + (j << self.n_index_q)  # feature
-                    + (value << (self.n_index_q + self.n_feature_q)) # value of a feature at a given row
+                    value       # value of a feature at a given row
+                    + (j << self.n_value_q)  # feature
+                    + (i << (self.n_value_q + self.n_feature_q)) # index
                 )
 
                 target[index] = amplitude
@@ -80,8 +80,8 @@ class ApproximateEncoder:
         print("\nAmplitude = ", amplitude)
 
         for j, value in enumerate(query):
-            # Quantum state = |value> |j>
-            index = j + (int(value) << self.n_feature_q)
+            # Quantum state = |j> |value>
+            index = value + (int(j) << self.n_value_q)
             target[index] = amplitude
 
             # print(f"Value: {value}/{value:b}; j={j}; Index: {index}/{index:b}; Target amplitude: {target[index]}")

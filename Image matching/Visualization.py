@@ -40,9 +40,9 @@ def print_state_info_tabular(state, title, n_value_q, n_feature_q, n_index_q):
 def extract_fields_from_q_state(state, n_value_q, n_feature_q, n_index_q):
     '''Defined for NEQR encoding scheme
     For dataset:
-    |value> |feature no> |index>
+    |index> |feature no> |value>
     For query:
-    |value> |feature no>
+    |feature no> |value>
     '''
 
     total_qubits = state.num_qubits
@@ -52,25 +52,35 @@ def extract_fields_from_q_state(state, n_value_q, n_feature_q, n_index_q):
 
     extracted_dict = []
 
+    # STRING SLICING : string[start : stop : step]
+
     for basis, amplitude in enumerate(state.data):
         if abs(amplitude) > 1e-4:
             basis_string = format(basis, f'0{total_qubits}b')
 
-            value_string = basis_string[:n_value_q]
-            value = int(value_string, 2)
-
-            feature_string = basis_string[
-                n_value_q : n_value_q + n_feature_q
-            ]
-            feature = int(feature_string, 2)
-
             if is_query:
+                # Query format: feature (n_feature_q) + value (n_value_q)
                 index = 0
+                
+                feature_string = basis_string[:n_feature_q]
+                feature = int(feature_string, 2)
+                
+                value_string = basis_string[n_feature_q:]
+                value = int(value_string, 2)
             else:
-                index_string = basis_string[
-                    n_value_q + n_feature_q :
-                ]
+                # Dataset format: index (n_index_q) + feature (n_feature_q) + value (n_value_q)
+                # Read from left to right:
+                idx_end = n_index_q
+                feat_end = n_index_q + n_feature_q
+                
+                index_string = basis_string[:idx_end]
                 index = int(index_string, 2)
+                
+                feature_string = basis_string[idx_end:feat_end]
+                feature = int(feature_string, 2)
+                
+                value_string = basis_string[feat_end:]
+                value = int(value_string, 2)
 
             extracted_dict.append([index, feature, value, amplitude])
 
@@ -150,7 +160,8 @@ def state_analysis(state, title, n_value_q, n_feature_q, n_index_q):
 
     plot_value_probabilities(state, title, n_value_q, n_feature_q, n_index_q)
     print_state_info_tabular(state, title, n_value_q, n_feature_q, n_index_q)
-
+    display_index_wise_probabilities(state, title, n_value_q, n_feature_q, n_index_q)
+    
 def plot_basis_vs_probs(state, title):
     state_probs = state.probabilities_dict()
 
@@ -252,3 +263,47 @@ def basis_vs_prob_plot_to_compare_states(target_state, encoded_state):
     fig.set_size_inches(25, 6)
     fig.tight_layout()
     display(fig)
+
+def display_index_wise_probabilities(state, title, n_value_q, n_feature_q, n_index_q):
+    total_qubits = state.num_qubits
+    probabilities = state.probabilities()
+
+    # Check whether this is a dataset state or query state
+    is_dataset = (total_qubits == n_value_q + n_feature_q + n_index_q)
+    if not is_dataset:
+        return
+
+    N_I = 2 ** n_index_q
+    index_probs = np.zeros(N_I)
+
+    for basis_index, probability in enumerate(probabilities):
+        # Index occupies the most significant bits
+        row_index = basis_index >> (n_value_q + n_feature_q)
+        index_probs[row_index] += probability
+
+    # Plot index-wise probabilities
+    indices = np.arange(N_I)
+
+    plt.figure(figsize=(10, 5))
+    bars = plt.bar(indices, index_probs)
+
+    plt.xlabel("Dataset Index (Row)")
+    plt.ylabel("Probability")
+    plt.title(f"Index-wise Probabilities - {title}")
+    plt.xticks(indices)
+    plt.grid(axis="y", linestyle="--", alpha=0.5)
+
+    # Display probability above each bar
+    for bar, probability in zip(bars, index_probs):
+        if probability > 1e-8:
+            plt.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height(),
+                f"{probability:.4f}",
+                ha="center",
+                va="bottom",
+                fontsize=9
+            )
+
+    plt.tight_layout()
+    plt.show()
