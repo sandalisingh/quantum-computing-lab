@@ -177,6 +177,7 @@ class ApproximateEncoder:
 
         self.n_index_q = math.ceil(math.log2(self.N_I))
         self.n_feature_q = math.ceil(math.log2(self.N_D))
+        self.n_value_q = 0
 
         padded_N_I = 2 ** self.n_index_q
         padded_N_D = 2 ** self.n_feature_q
@@ -194,28 +195,35 @@ class ApproximateEncoder:
 
         # Normalize each nonzero row
         norms = np.linalg.norm(dataset, axis=1, keepdims=True)  # axis=1 works on each row, computes L2 euclidean norm = summation x^2; returns (N,1) matrix
-        normalized_dataset = np.zeros_like(dataset, dtype=float)    # create a zero matrix of same shape as dataset
+        # normalized_dataset = np.zeros_like(dataset, dtype=float)    # create a zero matrix of same shape as dataset
 
-        nonzero_rows = norms[:, 0] > 0
-        normalized_dataset[nonzero_rows] = (
-            dataset[nonzero_rows] / norms[nonzero_rows]
-        )
+        # nonzero_rows = norms[:, 0] > 0
+        # normalized_dataset[nonzero_rows] = (
+        #     dataset[nonzero_rows] / norms[nonzero_rows]
+        # )
 
-        # Assign equal weight to every row, including zero rows.
-        # A zero row is represented by a uniform feature state.
-        normalized_dataset[~nonzero_rows] = 1 / np.sqrt(self.N_D)
+        # # Assign equal weight to every row, including zero rows.
+        # # A zero row is represented by a uniform feature state.
+        # normalized_dataset[~nonzero_rows] = 1 / np.sqrt(self.N_D)
+
+        divisor = np.sqrt(np.sum(dataset ** 2))
+        if divisor == 0:
+            raise ValueError("Cannot normalize a dataset containing only zeros.")
+        normalized_dataset = dataset / divisor
+
+        print("Normalized dataset = ")
+        print(normalized_dataset)
 
         target = np.zeros(padded_N_I * padded_N_D, dtype=complex)
 
         for i in range(self.N_I):
             for j in range(self.N_D):
                 target[i * padded_N_D + j] = (
-                    normalized_dataset[i, j] / np.sqrt(self.N_I)
+                    normalized_dataset[i, j]
                 )
 
         target_norm = np.linalg.norm(target)
-        if not np.isclose(target_norm, 1.0):
-            raise ValueError(f"Target is not normalized: {target_norm}")
+        assert np.isclose(target_norm, 1.0), f"Target is not normalized: {target_norm}"
 
         print(f"\nTarget: {target}")
         print(f"Target norm: {target_norm}")
@@ -548,8 +556,10 @@ class ApproximateEncoder:
                 method = getattr(self, f"prepare_neqr_{suffix}")
             case "FRQI":
                 method = getattr(self, f"prepare_frqi_{suffix}")
-            case _:
+            case "AMPL":
                 method = getattr(self, f"prepare_amplitude_{suffix}")
+            case _:
+                raise ValueError("Select one of NEQR, FRQI, or AMPL.")    
 
         target_state = method(data)
         print("\nPrepared target state = ")

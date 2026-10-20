@@ -57,7 +57,7 @@ def load_parameters(
     return {
         "parameters": parameters,
         "fidelity": metadata["fidelity"],
-        "depth_A": metadata["depth"],
+        "depth": metadata["depth"],
         "epochs": metadata["epochs"],
         "learning_rate": metadata["learning_rate"],
         "scheme": metadata["scheme"],

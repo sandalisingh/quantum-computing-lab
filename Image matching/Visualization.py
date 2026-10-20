@@ -66,7 +66,7 @@ def extract_fields_from_q_state(state, n_value_q, n_feature_q, n_index_q):
                 feature = int(feature_string, 2)
                 
                 value_string = basis_string[n_feature_q:]
-                value = int(value_string, 2)
+                value = int(value_string, 2) if value_string else 0
             else:
                 # Dataset format: index (n_index_q) + feature (n_feature_q) + value (n_value_q)
                 # Read from left to right:
@@ -80,7 +80,7 @@ def extract_fields_from_q_state(state, n_value_q, n_feature_q, n_index_q):
                 feature = int(feature_string, 2)
                 
                 value_string = basis_string[feat_end:]
-                value = int(value_string, 2)
+                value = int(value_string, 2) if value_string else 0
 
             extracted_dict.append([index, feature, value, amplitude])
 

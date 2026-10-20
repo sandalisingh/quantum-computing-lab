@@ -111,7 +111,7 @@ class GroverSearch:
 
   def run(self, dataset, query,
       A_parameters, B_parameters, depth_A=6, depth_B=3,
-      num_of_iter=1, no_of_shots=2000
+      num_of_iter=1, no_of_shots=2000, scheme="NEQR"
   ):
     # self.N_I, self.N_D = dataset.shape  # number of rows, number of columns/features
     self.N_I = len(dataset) # number of rows
@@ -120,9 +120,16 @@ class GroverSearch:
     self.n_index_q = math.ceil(math.log2(self.N_I)) # represents row number or index of the data element
     self.n_feature_q = math.ceil(math.log2(self.N_D))  # represents feature number
 
-    min_value = 0
-    max_value = int(np.max(dataset))
-    self.n_value_q = max(1, math.ceil(math.log2(max_value + 1)))   # represents number of qubits required for the value of a feature of a data element
+    match scheme:
+      case "NEQR":  # value represented in basis as |index>|feature>|value>
+        max_value = int(np.max(dataset))
+        self.n_value_q = max(1, math.ceil(math.log2(max_value + 1)))   # represents number of qubits required for the value of a feature of a data element
+      case "FRQI":  # value represented in 1 qubit as intensity from |0> to |1> as angle theta
+        self.n_value_q = 1
+      case "AMPL":  # value represented as amplitude of |index>|feature>, no separate qubit required
+        self.n_value_q = 0
+      case _:
+        raise ValueError("Use NEQR, FRQI, or AMPL.")
 
     self.total_qubits = self.n_index_q + self.n_feature_q + self.n_value_q 
 
