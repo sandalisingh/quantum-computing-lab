@@ -90,18 +90,8 @@ class ApproximateEncoder:
 
     def prepare_frqi_dataset_target(self, dataset):
         """
-        FRQI-style dataset target.
-
-        Dataset shape: N_I x N_D
-
-        State:
-            1/sqrt(N_I*N_D) * sum_i sum_j [
-                cos(theta_ij)|0>|j>|i>
-                + sin(theta_ij)|1>|j>|i>
-            ]
-
-        Qubit order in the state index:
-            |intensity>|feature index>|record index>
+        State = 1/sqrt(N_I*N_D) * sum_i sum_j [ |i> |j> [cos(theta_ij)|0> + sin(theta_ij)|1>]]
+        = |record index>|feature index>|intensity>
         """
 
         dataset = np.asarray(dataset, dtype=float)
@@ -136,31 +126,21 @@ class ApproximateEncoder:
             for j in range(self.N_D):
                 angle = theta[i, j]
 
-                # Index of |intensity=0>|feature j>|record i>
-                index_0 = i + (j << self.n_index_q)
+                # Index of |index i> |feature j> |intensity=0>
+                index_0 = (i << (self.n_feature_q + self.n_value_q)) + (j << self.n_value_q)
 
-                # Index of |intensity=1>|feature j>|record i>
-                index_1 = index_0 + (1 << (self.n_index_q + self.n_feature_q))
+                # Index of |index i> |feature j> |intensity=1>
+                index_1 = index_0 + 1
 
-                target[index_0] = amplitude * np.cos(angle)
-                target[index_1] = amplitude * np.sin(angle)
+                target[index_0] = amplitude * np.cos(angle) # cosθ |0>
+                target[index_1] = amplitude * np.sin(angle) # sinθ |1>
 
         return Statevector(target)
 
     def prepare_frqi_query_target(self, query):
         """
-        FRQI-style query target.
-
-        Query shape: N_D
-
-        State:
-            1/sqrt(N_D) * sum_j [
-                cos(theta_j)|0>|j>
-                + sin(theta_j)|1>|j>
-            ]
-
-        Qubit order in the state index:
-            |intensity>|feature index>
+        State = 1/sqrt(N_D) * sum_j [ |j> [cos(theta_j)|0> + sin(theta_j)]|1>]
+        = |intensity>|feature index>
         """
 
         query = np.asarray(query, dtype=float).flatten()
@@ -180,14 +160,14 @@ class ApproximateEncoder:
         for j in range(self.N_D):
             angle = theta[j]
 
-            # |intensity=0>|feature j>
-            index_0 = j
+            # |feature j> |intensity=0>
+            index_0 = j << self.n_value_q
 
-            # |intensity=1>|feature j>
-            index_1 = j + (1 << self.n_feature_q)
+            # |feature j> |intensity=1>
+            index_1 = index_0 + 1
 
-            target[index_0] = amplitude * np.cos(angle)
-            target[index_1] = amplitude * np.sin(angle)
+            target[index_0] = amplitude * np.cos(angle) # cosθ |0>
+            target[index_1] = amplitude * np.sin(angle) # sinθ |1>
 
         return Statevector(target)
 
