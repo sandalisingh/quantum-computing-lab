@@ -46,45 +46,40 @@ def extract_fields_from_q_state(state, n_value_q, n_feature_q, n_index_q):
     '''
 
     total_qubits = state.num_qubits
-    query_qubits = n_value_q + n_feature_q
+    is_query = total_qubits == n_value_q + n_feature_q
 
-    is_query = (total_qubits == query_qubits)
+    expected_qubits = (
+        n_feature_q + n_value_q
+        if is_query
+        else n_index_q + n_feature_q + n_value_q
+    )
 
-    extracted_dict = []
+    if total_qubits != expected_qubits:
+        raise ValueError(
+            f"State has {total_qubits} qubits, but "
+            f"{expected_qubits} were expected."
+        )
 
-    # STRING SLICING : string[start : stop : step]
+    extracted = []
 
     for basis, amplitude in enumerate(state.data):
-        if abs(amplitude) > 1e-4:
-            basis_string = format(basis, f'0{total_qubits}b')
+        if abs(amplitude) <= 1e-4:
+            continue
 
-            if is_query:
-                # Query format: feature (n_feature_q) + value (n_value_q)
-                index = 0
-                
-                feature_string = basis_string[:n_feature_q]
-                feature = int(feature_string, 2)
-                
-                value_string = basis_string[n_feature_q:]
-                value = int(value_string, 2) if value_string else 0
-            else:
-                # Dataset format: index (n_index_q) + feature (n_feature_q) + value (n_value_q)
-                # Read from left to right:
-                idx_end = n_index_q
-                feat_end = n_index_q + n_feature_q
-                
-                index_string = basis_string[:idx_end]
-                index = int(index_string, 2)
-                
-                feature_string = basis_string[idx_end:feat_end]
-                feature = int(feature_string, 2)
-                
-                value_string = basis_string[feat_end:]
-                value = int(value_string, 2) if value_string else 0
+        value_mask = (1 << n_value_q) - 1
+        feature_mask = (1 << n_feature_q) - 1
 
-            extracted_dict.append([index, feature, value, amplitude])
+        value = basis & value_mask
+        feature = (basis >> n_value_q) & feature_mask
 
-    return extracted_dict
+        if is_query:
+            index = 0
+        else:
+            index = basis >> (n_value_q + n_feature_q)
+
+        extracted.append([index, feature, value, amplitude])
+
+    return extracted
 
 def plot_value_probabilities(state, title, n_value_q, n_feature_q, n_index_q):
     rows = extract_fields_from_q_state(state, n_value_q, n_feature_q, n_index_q)
