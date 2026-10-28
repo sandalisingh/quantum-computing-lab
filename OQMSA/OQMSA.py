@@ -8,24 +8,25 @@ from qiskit import QuantumCircuit, transpile
 from qiskit.circuit.library import StatePreparation, Diagonal
 from qiskit_aer import AerSimulator
 
+
 def plot_signed_amplitude(state, title):
     labels = []
     amplitudes = []
 
     for i, a in enumerate(state.data):
-        bitstring = format(i, f"0{state.num_qubits}b")
-
-        labels.append(bitstring)
-        amplitudes.append(np.real(a))
+        if abs(a) > 1e-4:
+            labels.append(i)
+            amplitudes.append(np.real(a))
 
     fig, ax = plt.subplots(figsize=(25, 6))
     ax.bar(labels, amplitudes)
     ax.axhline(y=0, color="black", linewidth=1)
     ax.set(
         title=title,
-        xlabel="Basis State",
+        xlabel="Data (Decimal)",
         ylabel="Signed Amplitude"
     )
+    ax.set_xticks(labels)
     ax.tick_params(axis="x", labelrotation=90 if len(labels) > 10 else 0)
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
@@ -38,21 +39,22 @@ class OQMSA:
     def state_preparation(self, dataset): # basis encoding
         N = len(dataset)
         max_element = max(dataset)
-        self.n_data_q = max(1, math.ceil(math.log2(max_element + 1)))
-        N_padded = 2**self.n_data_q
+        n_data_q = max(1, math.ceil(math.log2(max_element + 1)))
+        N_padded = 2 ** n_data_q
         
-        qc = QuantumCircuit(self.n_data_q)
-        amplitudes = np.zeros(2**self.n_data_q, dtype=complex)
+        qc = QuantumCircuit(n_data_q)
+        amplitudes = np.zeros(N_padded, dtype=complex)
 
         for data in dataset:
-            amplitudes[data] = 1 / np.sqrt(N)
+            amplitudes[data] = 1 
+        amplitudes /= np.linalg.norm(amplitudes)
 
-        state = Statevector(amplitudes)
-        qc.initialize(state, range(self.n_data_q))
+        state_prep = StatePreparation(amplitudes)
+        qc.append(state_prep, range(n_data_q))
         qc.barrier()
         return qc
 
-    def oracle(self, n_data_q, d, phi=math.pi):
+    def oracle(self, n_data_q, d, phi=np.pi):
         '''
         d : current minimum
         Oracle marks the phase of all the elements less than d
@@ -93,7 +95,7 @@ class OQMSA:
                 oracle.barrier()
         return oracle
 
-    def diffuser(self, dataset, n_data_q, phi=math.pi):
+    def diffuser(self, dataset, n_data_q, phi=np.pi):
         '''
         Diffuser amplifies the amplitude of all those elements marked by the oracle.
         '''
@@ -123,9 +125,6 @@ class OQMSA:
         return diffuser
 
     def grover_long(self, dataset, n_data_q, no_of_iter, d):
-        N = len(dataset)
-        M = d
-        phi = 2 * np.arcsin(np.sin(np.pi / np.sqrt(4 * no_of_iter + 2)) * np.sqrt(M / N))
         qc = QuantumCircuit(n_data_q, name="Grover-long")
         qc.compose(self.state_preparation(dataset), inplace=True)
         print("\n> Initial state before Grover-Long searching:")
@@ -133,127 +132,90 @@ class OQMSA:
         display(state.draw("latex"))
         plot_signed_amplitude(state, "Initial State")
 
+        oracle = self.oracle(n_data_q, d)
+        diffuser = self.diffuser(dataset, n_data_q)
+
         for i in range(no_of_iter):
             print("\n> Grover-Long iteration", i + 1)
 
-            oracle = self.oracle(n_data_q, d, phi)
-            qc.compile(oracle, inplace=True)
-            print("\nState after applying the oracle:")
+            qc.compose(oracle, inplace=True)
             state = Statevector.from_instruction(qc)
             display(state.draw("latex"))
             plot_signed_amplitude(state, f"After Oracle - Iteration {i + 1}")
 
-            diffuser = self.diffuser(dataset, n_data_q, phi)
-            qc.compile(diffuser, inplace=True)
-            print("\nState after applying the diffuser:")
+            qc.compose(diffuser, inplace=True)
             state = Statevector.from_instruction(qc)
             display(state.draw("latex"))
             plot_signed_amplitude(state, f"After Diffuser - Iteration {i + 1}")
 
-        print("\n> Grover-Long search completed with no of iterations =", no_of_iter)
-
         return qc
 
     def run(self, dataset):
+        """
+        measured value replaces the current candidate when
+        the measured value is smaller
+        """
+
         d = random.choice(dataset)  # current min chosen randomly
-        n_data_q = (d + 1).bit_length()
+
+        state_prep = self.state_preparation(dataset)
+
+        max_element = max(dataset)
+        n_data_q = max(1, math.ceil(math.log2(max_element + 1)))
         N = len(dataset)
-        t_max = math.pi / 2 - np.arcsin(1/np.sqrt(N)) / np.arcsin(1/np.sqrt(N))
-        t = 1 # initial t
-        lambda_ = 6/5
-        r = math.inf
+        backend = AerSimulator()
 
-        print("Initial minimum candidate =", d)
-        print("Number of qubits =", n_data_q)
-        print("Maximum Grover-Long iterations t_max =", t_max)
+        print("Dataset = ", dataset)
+        print("Number of data qubits = ", n_data_q)
+        print("\n>> Initial minimum candidate = ", d)
 
-        # Create an equal superposition
-        qc = QuantumCircuit(n_data_q)
-        qc.h(range(n_data_q))
-
-        state_before = Statevector.from_instruction(qc)
-        display(state_before.draw("latex"))
-
-        for i in range(math.ceil(math.log2(N)) + 1):
-            t_max = math.pi / 2 - np.arcsin(1/np.sqrt(N)) / np.arcsin(1/np.sqrt(N))
-            M = d
+        i = 0
+        while i < (math.ceil(math.log2(N)) + 1):
+            theta = np.arcsin(1 / np.sqrt(N))
+            t_max = int((math.pi / 2 - theta) / theta)
+            # M = d
+            M = sum(1 for value in dataset if value < d)
+            t = 1 # initial t
+            lambda_ = 6/5
+            r = math.inf
 
             while t <= t_max and r > d:
-                state_prep = self.state_preparation(dataset)
-                qc.compile(state_prep, inplace=True)
+                qc = QuantumCircuit(n_data_q)
 
                 if M/N > 1/9:
-                    t_dash = random.randint(0, t)
+                    t_dash = int(random.randint(0, t))
                     print("\n>> BHTT(GL) with no of iterations = ", t_dash)
-                    grover_long_iters = self.grover_long(t_dash)
-                    qc.compile(grover_long_iters, inplace=True)
+                    grover_long_iters = self.grover_long(dataset, n_data_q, t_dash, d)
+                    qc.compose(grover_long_iters, inplace=True)
                     t = t * lambda_
-
                 else:
                     print("\n>> GL with no of iterations t_max = ", t_max)
-                    grover_long_iters = self.grover_long(t_max)
-                    qc.compile(grover_long_iters, inplace=True)
+                    grover_long_iters = self.grover_long(dataset, n_data_q, t_max, d)
+                    qc.compose(grover_long_iters, inplace=True)
 
-                final_state = Statevector.from_instruction(qc)
-                print("Final state :")
-                display(final_state.draw("latex"))
-                plot_signed_amplitude(final_state, "Final State")
+                print("\n>> Measuring...")
+                meas_qc = qc.copy()
+                meas_qc.measure_all()
 
-                probabilities = final_state.probabilities()
+                meas_qc = transpile(meas_qc, backend)
+                job = backend.run(meas_qc, shots=1, memory=True)
+                result = job.result()
+                r = int(result.get_memory()[0], 2)
 
-                measured_index = int(np.random.choice(len(probabilities), p=probabilities))
+                print(f"Measured value: {r}")
 
-                print("Measured basis-state index =", measured_index)
-
-                # Convert the measured index to the corresponding dataset value
-                r = dataset[measured_index]
-
-                print("Measured dataset value r =", r)
-                print("Current minimum candidate d' =", d)
-
-                # If the measured value is smaller, update the minimum
-                if r < d:
-
-                    print("\n[MINIMUM UPDATE]")
-                    print("New minimum found!")
-                    print("Previous minimum =", d)
-                    print("New minimum =", r)
-
-                    d = r
-
-                    # Reset the outer loop, as specified in Algorithm 1
-                    i = 0
-
-                    print("Reset outer iteration i = 0")
-
-                    break
-
-                else:
-
-                    print("No smaller minimum found in this measurement.")
-
-                # If using t_max, do not repeat the same search indefinitely
-                if M / N <= 1 / 9:
-                    print("Completed the t_max search attempt.")
-                    break
-
-            # Check whether a new minimum was found
-            if r < d:
-                # Normally unreachable because d was updated above;
-                # retained for clarity when following Algorithm 1.
+            if r not in dataset:
+                print("Measured value not in dataset")
+            elif r < d:
+                print("\n> MINIMUM UPDATE")
+                print("New candidate = ", r)
+                d = r
                 i = 0
             else:
+                print("No smaller candidate found in this round.")
                 i += 1
 
-            print("\nEnd of outer iteration.")
-            print("Current minimum =", d)
-            print("Next outer iteration i =", i)
-
-            # Stop if no better candidate can be marked
-            if sum(value < d for value in dataset) == 0:
-                print("\nNo smaller dataset items remain.")
-                break
-
-        print("OQMSA COMPLETED")
+        print("\n> OQMSA completed.")
+        print(">> Minimum candidate found =", d)
 
         return d
