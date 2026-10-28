@@ -184,7 +184,7 @@ class OQMSA:
                 qc = QuantumCircuit(n_data_q)
 
                 if M/N > 1/9:
-                    t_dash = int(random.randint(0, t))
+                    t_dash = random.randint(0, int(t))
                     print("\n>> BHTT(GL) with no of iterations = ", t_dash)
                     grover_long_iters = self.grover_long(dataset, n_data_q, t_dash, d)
                     qc.compose(grover_long_iters, inplace=True)
@@ -197,13 +197,10 @@ class OQMSA:
                 display(qc.draw("mpl"))
 
                 print("\n>> Measuring...")
-                meas_qc = qc.copy()
-                meas_qc.measure_all()
+                state = Statevector.from_instruction(qc)
+                probabilities = state.probabilities()
 
-                meas_qc = transpile(meas_qc, backend)
-                job = backend.run(meas_qc, shots=1, memory=True)
-                result = job.result()
-                r = int(result.get_memory()[0], 2)
+                r = int(np.argmax(probabilities))
 
                 print(f"Measured value: {r}")
 
@@ -221,4 +218,31 @@ class OQMSA:
         print("\n> OQMSA completed.")
         print(">> Minimum candidate found =", d)
 
+        return d
+
+    def run(self, dataset, no_of_iterations=5): # for test run
+        d = random.choice(dataset)
+
+        max_element = max(dataset)
+        n_data_q = max(1, math.ceil(math.log2(max_element + 1)))
+
+        print("Dataset =", dataset)
+        print("Number of data qubits =", n_data_q)
+        print("Initial minimum candidate =", d)
+
+        for i in range(no_of_iterations):
+            print(f"\n>> Grover-Long test run {i + 1}/{no_of_iterations}")
+
+            qc = self.grover_long(dataset, n_data_q, no_of_iter=1, d=d)
+
+            state = Statevector.from_instruction(qc)
+            probabilities = state.probabilities()
+            r = int(np.argmax(probabilities))
+
+            print("Measure value : ", r)
+
+            if r < d:
+                d = r
+
+        print("\n> MINIMUM VALUE = ", d)
         return d
