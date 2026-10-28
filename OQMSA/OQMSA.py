@@ -92,7 +92,7 @@ class OQMSA:
                     if bit == "0":
                         oracle.x(i)
 
-                oracle.barrier()
+        oracle.barrier()
         return oracle
 
     def diffuser(self, dataset, n_data_q, phi=np.pi):
@@ -121,6 +121,7 @@ class OQMSA:
 
         # W (state preparation)
         diffuser.compose(prep, inplace=True)
+        diffuser.barrier()
 
         return diffuser
 
@@ -192,6 +193,8 @@ class OQMSA:
                     print("\n>> GL with no of iterations t_max = ", t_max)
                     grover_long_iters = self.grover_long(dataset, n_data_q, t_max, d)
                     qc.compose(grover_long_iters, inplace=True)
+
+                display(qc.draw("mpl"))
 
                 print("\n>> Measuring...")
                 meas_qc = qc.copy()
