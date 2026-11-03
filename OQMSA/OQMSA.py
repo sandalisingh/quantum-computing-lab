@@ -69,7 +69,6 @@ class OQMSA:
 
             if d & (1 << k):  # if kth bit is 1
 
-
                 # Create the prefix that identifies the states to mark
                 prefix = binary_d[:n_data_q - k - 1] + "0"  # (a0 + a1 + ... a(k-1)) + "0"
 
