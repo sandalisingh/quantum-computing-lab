@@ -92,6 +92,7 @@ class GroverAdaptiveSearch:
     def run(self, max_rounds=None):
         m = 1.0
         max_m = math.sqrt(self.N)   # max number of grover iterations
+        R = 0 # represents computational cost, cumulative number of queries 
 
         print("Initial solution:", self.best_solution)
         print("Initial cost:", self.best_value)
@@ -104,6 +105,7 @@ class GroverAdaptiveSearch:
             j = self.rng.randrange(max(1, math.ceil(m)))    # min 1 to avoid zero iterations
 
             candidate_index = self.measure(self.best_value, j)  # run grover search with current best value as threshold and j iterations
+            R += j
 
             candidate = self.decode(candidate_index)
             candidate_cost = self.qubo(candidate)
@@ -134,5 +136,8 @@ class GroverAdaptiveSearch:
 
             self.history.append(current_info)
             print(current_info)
+
+        print("\n> Grover Adaptive Search completed")
+        print(f"Number of queries: {R}")
 
         return self.best_solution, self.best_value
